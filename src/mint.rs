@@ -13,6 +13,7 @@ pub const IMAGE: &str = "QmdBddzRiQfWDs5uAovq4jxoBtsAKeJAipoqHAefmhoLBs";
 #[near_bindgen]
 impl Contract {
 
+    // Method to mint a quest (NFT), receives as a parameter the type of quest that will be minted
     #[payable]
     pub fn nft_mint_quest(&mut self, quest_number: u64) -> Promise {
         let receiver_id = env::signer_account_id();
@@ -22,9 +23,11 @@ impl Contract {
         let mut has_por_nft = false;
         let mut has_quest_nft = false;
 
+        // Validate that the quest entered exists within the available list
         if let Some(quest) = QuestType::from_number(quest_number) {
             let (id, name, description, score, image) = quest.get_quest_info();
 
+            // Get the list of tokens per user
             let tokens_for_owner_set = self.tokens_per_owner.get(&receiver_id);
             let tokens = if let Some(tokens_for_owner_set) = tokens_for_owner_set {
                 tokens_for_owner_set
@@ -32,6 +35,8 @@ impl Contract {
                 near_sdk::collections::UnorderedSet::new(b"tokens".to_vec()) 
             };
 
+
+            // If the list of tokens is different from empty, then we look for whether the NFT of the quest to be minted already exists
             if !tokens.is_empty() {
                 let start = u128::from(U128(0));
                 has_quest_nft = tokens.iter()
@@ -61,11 +66,14 @@ impl Contract {
                 .any(|value| value);
             }
 
+            // If it already exists then we stop the execution of the method
             if has_quest_nft {
             env::panic_str("Quest token has already been minted");
             }
 
             let accountid = env::signer_account_id().clone();
+
+            // Validate the type of quest that will be mined and make the cross contract call to the quest contract to verify that the challenge is completed.
             // Im Human
             if quest_number == 0 {
                 let call0 = ext_nft::is_human(
@@ -137,6 +145,10 @@ impl Contract {
 
     }
 
+    // The following methods obtain the response from the promise of each of the 4 types of XCC that was carried out previously, where it is validated that the challenge was completed to subsequently mint the token.
+    // Each NFT will contain its own image and metadata.
+    // In any case, it is verified if the main token has already been minted (Proof of Reputation) and the metadata score will be updated.
+    // If you still do not have the main token, then a new one is created.
     #[payable]
     pub fn resolve_mint_im_human(&mut self, name: String, description: String, score: u64, image: String, has_por_nft: bool) -> String {
         assert_eq!(
@@ -151,13 +163,9 @@ impl Contract {
             },
             PromiseResult::Successful(result) => {
                 let value = std::str::from_utf8(&result).unwrap();
-                log!("Registrado en Im Human: {}",value);
-
                 let receiver_id = env::signer_account_id();
                 let initial_storage_usage = env::storage_usage();
                 if value != "[]" {
-                    // Minar
-                    log!("Registrado en Im Human: {}",value);
                     let mut new_token = TokenMetadata {
                         title:  Some(name.to_string()), 
                         description:  Some(description.to_string()),
@@ -204,10 +212,7 @@ impl Contract {
                         self.token_metadata_by_id.insert(&token_id, &new_token);
                         self.internal_add_token_to_owner(&token.owner_id, &token_id);
                 
-                        // Validar si ya tiene el POR NFT
                         if has_por_nft {
-                            log!("Ya tiene el POR NFT");
-
                             let tokens_for_owner_set = self.tokens_per_owner.get(&receiver_id);
                             let tokens = if let Some(tokens_for_owner_set) = tokens_for_owner_set {
                                 tokens_for_owner_set
@@ -215,7 +220,6 @@ impl Contract {
                                 near_sdk::collections::UnorderedSet::new(b"tokens".to_vec()) 
                             };
                 
-                            // Actualizar los valores del NFT
                             let start = u128::from(U128(0));
                             let mut por_nft = tokens.iter()
                             .skip(start as usize) 
@@ -242,13 +246,8 @@ impl Contract {
                             extra_string = str::replace(&extra_string, "\"", "'");
                             metadata.extra = Some(extra_string.clone());
                 
-                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);
-                
-                            log!("POR NFT Actualizado");
-                        } else {
-                            log!("No tiene el POR NFT");
-                
-                            // Minar el token nuevo
+                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);                
+                        } else {                
                             let mut new_token = TokenMetadata {
                                 title:  Some("Proof Of Reputation NFT".to_string()), 
                                 description:  Some("This nft contains the information with the progress within the network".to_string()),
@@ -300,12 +299,8 @@ impl Contract {
                 
                     let required_storage_in_bytes = env::storage_usage() - initial_storage_usage;
                     refund_deposit(required_storage_in_bytes);
-                } else {
-                    // No minar
-                    log!("No estas registrado en Im Human");
                 }
-                
-                return "Éxito al obtener Im Human".to_string();
+                return "Success in obtaining I am human".to_string();
             }
         }
     }
@@ -324,13 +319,9 @@ impl Contract {
             },
             PromiseResult::Successful(result) => {
                 let value = std::str::from_utf8(&result).unwrap();
-                log!("stNEAR: {}",value);
-
                 let receiver_id = env::signer_account_id();
                 let initial_storage_usage = env::storage_usage();
                 if value != "0" {
-                    // Minar
-                    log!("stNEAR: {}",value);
                     let mut new_token = TokenMetadata {
                         title:  Some(name.to_string()), 
                         description:  Some(description.to_string()),
@@ -377,10 +368,7 @@ impl Contract {
                         self.token_metadata_by_id.insert(&token_id, &new_token);
                         self.internal_add_token_to_owner(&token.owner_id, &token_id);
                 
-                        // Validar si ya tiene el POR NFT
                         if has_por_nft {
-                            log!("Ya tiene el POR NFT");
-
                             let tokens_for_owner_set = self.tokens_per_owner.get(&receiver_id);
                             let tokens = if let Some(tokens_for_owner_set) = tokens_for_owner_set {
                                 tokens_for_owner_set
@@ -388,7 +376,6 @@ impl Contract {
                                 near_sdk::collections::UnorderedSet::new(b"tokens".to_vec()) 
                             };
                 
-                            // Actualizar los valores del NFT
                             let start = u128::from(U128(0));
                             let mut por_nft = tokens.iter()
                             .skip(start as usize) 
@@ -415,13 +402,8 @@ impl Contract {
                             extra_string = str::replace(&extra_string, "\"", "'");
                             metadata.extra = Some(extra_string.clone());
                 
-                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);
-                
-                            log!("POR NFT Actualizado");
-                        } else {
-                            log!("No tiene el POR NFT");
-                
-                            // Minar el token nuevo
+                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);                
+                        } else {                
                             let mut new_token = TokenMetadata {
                                 title:  Some("Proof Of Reputation NFT".to_string()), 
                                 description:  Some("This nft contains the information with the progress within the network".to_string()),
@@ -473,12 +455,8 @@ impl Contract {
                 
                     let required_storage_in_bytes = env::storage_usage() - initial_storage_usage;
                     refund_deposit(required_storage_in_bytes);
-                } else {
-                    // No minar
-                    log!("No tiene stNEAR");
                 }
-                
-                return "Éxito al obtener stNEAR".to_string();
+                return "Success to get stNEAR".to_string();
             }
         }
     }
@@ -502,8 +480,6 @@ impl Contract {
                 let receiver_id = env::signer_account_id();
                 let initial_storage_usage = env::storage_usage();
                 if value != "0" {
-                    // Minar
-                    log!("Meta Token: {}",value);
                     let mut new_token = TokenMetadata {
                         title:  Some(name.to_string()), 
                         description:  Some(description.to_string()),
@@ -549,11 +525,7 @@ impl Contract {
                 
                         self.token_metadata_by_id.insert(&token_id, &new_token);
                         self.internal_add_token_to_owner(&token.owner_id, &token_id);
-                
-                        // Validar si ya tiene el POR NFT
                         if has_por_nft {
-                            log!("Ya tiene el POR NFT");
-
                             let tokens_for_owner_set = self.tokens_per_owner.get(&receiver_id);
                             let tokens = if let Some(tokens_for_owner_set) = tokens_for_owner_set {
                                 tokens_for_owner_set
@@ -561,7 +533,6 @@ impl Contract {
                                 near_sdk::collections::UnorderedSet::new(b"tokens".to_vec()) 
                             };
                 
-                            // Actualizar los valores del NFT
                             let start = u128::from(U128(0));
                             let mut por_nft = tokens.iter()
                             .skip(start as usize) 
@@ -575,12 +546,6 @@ impl Contract {
                                 }
                             })
                             .next().unwrap();
-
-                            env::log(
-                                json!(por_nft)
-                                .to_string()
-                                .as_bytes(),
-                            );
                 
                             let mut metadata = self.token_metadata_by_id.get(&por_nft.token_id).unwrap();
                             let newextradata = str::replace(&metadata.extra.as_ref().unwrap().to_string(), "'", "\"");
@@ -596,11 +561,7 @@ impl Contract {
                 
                             self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);
                 
-                            log!("POR NFT Actualizado");
                         } else {
-                            log!("No tiene el POR NFT");
-                
-                            // Minar el token nuevo
                             let mut new_token = TokenMetadata {
                                 title:  Some("Proof Of Reputation NFT".to_string()), 
                                 description:  Some("This nft contains the information with the progress within the network".to_string()),
@@ -652,12 +613,9 @@ impl Contract {
                 
                     let required_storage_in_bytes = env::storage_usage() - initial_storage_usage;
                     refund_deposit(required_storage_in_bytes);
-                } else {
-                    // No minar
-                    log!("No tienes Meta Token");
                 }
-                
-                return "Éxito al obtener Meta Token".to_string();
+
+                return "Success to get Meta Token".to_string();
             }
         }
     }
@@ -676,13 +634,9 @@ impl Contract {
             },
             PromiseResult::Successful(result) => {
                 let value = std::str::from_utf8(&result).unwrap();
-                log!("Voting Power: {}",value);
-
                 let receiver_id = env::signer_account_id();
                 let initial_storage_usage = env::storage_usage();
                 if value != "0" {
-                    // Minar
-                    log!("Voting Power: {}",value);
                     let mut new_token = TokenMetadata {
                         title:  Some(name.to_string()), 
                         description:  Some(description.to_string()),
@@ -729,18 +683,13 @@ impl Contract {
                         self.token_metadata_by_id.insert(&token_id, &new_token);
                         self.internal_add_token_to_owner(&token.owner_id, &token_id);
                 
-                        // Validar si ya tiene el POR NFT
                         if has_por_nft {
-                            log!("Ya tiene el POR NFT");
-
                             let tokens_for_owner_set = self.tokens_per_owner.get(&receiver_id);
                             let tokens = if let Some(tokens_for_owner_set) = tokens_for_owner_set {
                                 tokens_for_owner_set
                             } else {
                                 near_sdk::collections::UnorderedSet::new(b"tokens".to_vec()) 
-                            };
-                
-                            // Actualizar los valores del NFT
+                            };                
                             let start = u128::from(U128(0));
                             let mut por_nft = tokens.iter()
                             .skip(start as usize) 
@@ -767,13 +716,8 @@ impl Contract {
                             extra_string = str::replace(&extra_string, "\"", "'");
                             metadata.extra = Some(extra_string.clone());
                 
-                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);
-                
-                            log!("POR NFT Actualizado");
-                        } else {
-                            log!("No tiene el POR NFT");
-                
-                            // Minar el token nuevo
+                            self.token_metadata_by_id.insert(&por_nft.token_id, &metadata);                
+                        } else {                
                             let mut new_token = TokenMetadata {
                                 title:  Some("Proof Of Reputation NFT".to_string()), 
                                 description:  Some("This nft contains the information with the progress within the network".to_string()),
@@ -825,12 +769,8 @@ impl Contract {
                 
                     let required_storage_in_bytes = env::storage_usage() - initial_storage_usage;
                     refund_deposit(required_storage_in_bytes);
-                } else {
-                    // No minar
-                    log!("No tienes Voting Power: {}",value);
                 }
-                
-                return "Éxito al obtener Voting Power".to_string();
+                return "Success to get Voting Power".to_string();
             }
         }
     }
